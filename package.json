@@ -7,17 +7,30 @@
     "drawio-ai": "./src/cli.mjs"
   },
   "scripts": {
+    "start": "node server.mjs",
     "mcp": "node src/mcp-server.mjs",
     "cli": "node src/cli.mjs",
     "test": "node --test",
     "gen:catalog": "python3.11 scripts/ingest_index.py"
   },
   "files": [
-    "src", "catalog", "data", "rules", "vendor", "scripts", "examples",
-    "SKILL.md", "README.md", "THIRD_PARTY_NOTICES.md", ".nvmrc", ".python-version"
+    "src",
+    "catalog",
+    "data",
+    "rules",
+    "vendor",
+    "scripts",
+    "examples",
+    "SKILL.md",
+    "README.md",
+    "THIRD_PARTY_NOTICES.md",
+    ".nvmrc",
+    ".python-version"
   ],
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0"
+    "@anthropic-ai/sdk": "^0.106.0",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "express": "^5.2.1"
   },
   "engines": {
     "node": ">=18"

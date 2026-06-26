@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>drawio-ai-kit · Diagram Generator</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --surface: #161b22; --surface2: #21262d;
+      --border: #30363d; --border-focus: #58a6ff;
+      --text: #e6edf3; --text-muted: #7d8590;
+      --accent: #238636; --accent-hover: #2ea043;
+      --error: #f85149; --thinking: #d29922;
+      --anno: #f0883e;
+    }
+    html, body { height: 100%; }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 14px; line-height: 1.5;
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+
+    /* ── Top bar ── */
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 20px; height: 48px; flex-shrink: 0;
+      background: var(--surface); border-bottom: 1px solid var(--border);
+    }
+    .topbar-logo { font-size: 16px; font-weight: 600; }
+    .topbar-logo span { color: var(--border-focus); }
+    .topbar-sub { font-size: 12px; color: var(--text-muted); }
+
+    /* ── Split layout ── */
+    .split { flex: 1; display: flex; overflow: hidden; }
+
+    /* ── Left pane ── */
+    .pane-left {
+      width: 380px; flex-shrink: 0;
+      display: flex; flex-direction: column;
+      border-right: 1px solid var(--border); overflow: hidden;
+    }
+    .gen-section { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+
+    label { font-size: 11px; font-weight: 600; color: var(--text-muted); display: block; margin-bottom: 5px; text-transform: uppercase; letter-spacing: .5px; }
+    textarea {
+      width: 100%; min-height: 150px;
+      background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+      color: var(--text); font-family: inherit; font-size: 13px; line-height: 1.6;
+      padding: 10px 12px; resize: vertical; outline: none; transition: border-color .15s;
+    }
+    textarea:focus { border-color: var(--border-focus); }
+    textarea::placeholder { color: var(--text-muted); font-size: 12px; }
+
+    .upload-area {
+      border: 1px dashed var(--border); border-radius: 6px; padding: 12px 16px;
+      text-align: center; cursor: pointer; transition: border-color .15s, background .15s;
+      position: relative; font-size: 12px;
+    }
+    .upload-area:hover { border-color: var(--border-focus); background: rgba(88,166,255,.04); }
+    .upload-area.drag-over { border-color: var(--border-focus); background: rgba(88,166,255,.08); }
+    .upload-area.has-file { border-color: var(--accent); background: rgba(35,134,54,.06); }
+    .upload-area input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+    .upload-text { color: var(--text-muted); }
+    .upload-text strong { color: var(--text); }
+    .file-name { color: #3fb950; font-weight: 500; margin-top: 3px; }
+
+    .divider { display: flex; align-items: center; gap: 10px; color: var(--text-muted); font-size: 11px; }
+    .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+
+    .btn-generate {
+      width: 100%; padding: 11px 16px;
+      background: var(--accent); color: #fff; border: none; border-radius: 6px;
+      font-size: 14px; font-weight: 600; cursor: pointer; transition: background .15s;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .btn-generate:hover:not(:disabled) { background: var(--accent-hover); }
+    .btn-generate:disabled { background: var(--surface2); color: var(--text-muted); cursor: not-allowed; }
+
+    .ring { width: 16px; height: 16px; flex-shrink: 0; border: 2px solid rgba(210,153,34,.3); border-top-color: var(--thinking); border-radius: 50%; animation: spin .8s linear infinite; }
+    .ring-lg { width: 32px; height: 32px; border: 3px solid rgba(88,166,255,.2); border-top-color: var(--border-focus); border-radius: 50%; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .status { border-radius: 6px; padding: 10px 12px; font-size: 12px; display: none; }
+    .status.thinking { display: flex; align-items: center; gap: 8px; background: rgba(210,153,34,.1); border: 1px solid rgba(210,153,34,.3); color: var(--thinking); }
+    .status.error { display: block; background: rgba(248,81,73,.1); border: 1px solid rgba(248,81,73,.3); color: var(--error); }
+
+    /* ── Files in out/ ── */
+    .files-section { flex-shrink: 0; border-top: 1px solid var(--border); }
+    .files-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; cursor: pointer; user-select: none; background: var(--surface2); }
+    .files-header:hover { background: #2d333b; }
+    .files-header-left { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 500; }
+    .files-chevron { transition: transform .2s; font-size: 10px; color: var(--text-muted); }
+    .files-section.open .files-chevron { transform: rotate(180deg); }
+    .files-count { font-size: 11px; padding: 1px 7px; background: var(--surface); border-radius: 10px; color: var(--text-muted); }
+    .btn-refresh { background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 13px; padding: 2px 6px; border-radius: 4px; transition: color .15s, background .15s; }
+    .btn-refresh:hover { color: var(--text); background: var(--border); }
+    .files-body { display: none; max-height: 200px; overflow-y: auto; }
+    .files-section.open .files-body { display: block; }
+    .file-item { display: flex; align-items: center; gap: 10px; padding: 7px 16px; cursor: pointer; font-size: 12px; border-bottom: 1px solid var(--border); transition: background .12s; }
+    .file-item:last-child { border-bottom: none; }
+    .file-item:hover { background: var(--surface2); }
+    .file-item.active { background: rgba(88,166,255,.08); }
+    .file-item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+    .file-item-dl { flex-shrink: 0; background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 12px; padding: 2px 6px; border-radius: 4px; transition: color .15s, background .15s; }
+    .file-item-dl:hover { color: var(--text); background: var(--border); }
+    .files-empty { padding: 16px; font-size: 12px; color: var(--text-muted); text-align: center; }
+
+    /* ── Right pane ── */
+    .pane-right { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+
+    /* ── Toolbar ── */
+    .preview-toolbar {
+      display: flex; align-items: center; gap: 8px;
+      padding: 0 12px; height: 44px; flex-shrink: 0;
+      background: var(--surface2); border-bottom: 1px solid var(--border);
+      font-size: 12px; color: var(--text-muted);
+    }
+    .preview-toolbar-left { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+    .preview-filename { color: var(--text); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+    .preview-badge { font-size: 10px; padding: 2px 7px; background: rgba(35,134,54,.2); color: #3fb950; border-radius: 20px; font-weight: 500; white-space: nowrap; }
+
+    .btn-icon {
+      display: flex; align-items: center; gap: 5px;
+      padding: 5px 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text-muted);
+      border-radius: 5px; font-size: 12px; cursor: pointer; transition: all .15s; white-space: nowrap;
+    }
+    .btn-icon:hover:not(:disabled) { border-color: var(--border-focus); color: var(--text); }
+    .btn-icon.active { border-color: var(--anno); color: var(--anno); background: rgba(240,136,62,.1); }
+    .btn-icon.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .btn-icon.primary:hover:not(:disabled) { background: var(--accent-hover); }
+    .btn-icon:disabled { opacity: .35; cursor: not-allowed; }
+
+    /* ── Tab bar ── */
+    .tab-bar {
+      display: flex; align-items: stretch; flex-shrink: 0;
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 0 12px; gap: 2px;
+    }
+    .tab-btn {
+      display: flex; align-items: center; gap: 6px;
+      padding: 8px 14px; border: none; background: none; color: var(--text-muted);
+      font-family: inherit; font-size: 13px; cursor: pointer;
+      border-bottom: 2px solid transparent; transition: color .15s, border-color .15s;
+      position: relative; top: 1px;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: var(--border-focus); border-bottom-color: var(--border-focus); font-weight: 500; }
+    .tab-badge {
+      font-size: 10px; padding: 1px 6px; border-radius: 10px;
+      background: rgba(35,134,54,.2); color: #3fb950; font-weight: 600;
+    }
+
+    /* ── Tab panels ── */
+    .tab-panel { flex: 1; display: none; flex-direction: column; overflow: hidden; min-height: 0; }
+    .tab-panel.active { display: flex; }
+
+    /* ── Preview panel ── */
+    .preview-body {
+      flex: 1; overflow: auto;
+      display: flex; align-items: flex-start; justify-content: center;
+      padding: 24px; background: #f0f2f4; position: relative; min-height: 0;
+    }
+    .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--text-muted); text-align: center; position: absolute; inset: 0; }
+    .empty-state svg { opacity: .2; }
+    .empty-state p { font-size: 13px; line-height: 1.6; }
+    #imgWrapper { position: relative; display: inline-block; line-height: 0; }
+    #previewImg { max-width: 100%; height: auto; display: none; border-radius: 6px; box-shadow: 0 4px 24px rgba(0,0,0,.18); background: #fff; }
+    #annoLayer { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+    #annoLayer.draw-mode { pointer-events: all; cursor: crosshair; }
+    .preview-loading { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(240,242,244,.75); }
+    .preview-loading.visible { display: flex; }
+
+    /* ── Annotation panel ── */
+    .anno-panel {
+      flex-shrink: 0; border-top: 1px solid var(--border); background: var(--surface);
+      max-height: 220px; display: flex; flex-direction: column;
+      transition: max-height .25s;
+    }
+    .anno-panel.collapsed { max-height: 40px; }
+    .anno-panel-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 14px; height: 40px; flex-shrink: 0;
+      cursor: pointer; user-select: none; background: var(--surface2);
+    }
+    .anno-panel-header:hover { background: #2d333b; }
+    .anno-panel-left { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 500; }
+    .anno-count { font-size: 11px; padding: 1px 7px; background: rgba(240,136,62,.2); color: var(--anno); border-radius: 10px; }
+    .anno-chevron { font-size: 10px; color: var(--text-muted); transition: transform .2s; }
+    .anno-panel.collapsed .anno-chevron { transform: rotate(-90deg); }
+    .anno-list { overflow-y: auto; padding: 8px 12px; display: flex; flex-direction: column; gap: 6px; }
+    .anno-item {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
+      padding: 6px 10px;
+    }
+    .anno-num { width: 20px; height: 20px; flex-shrink: 0; border-radius: 50%; background: var(--anno); color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+    .anno-pos { font-size: 11px; color: var(--text-muted); flex-shrink: 0; font-family: monospace; }
+    .anno-input { flex: 1; background: transparent; border: none; color: var(--text); font-family: inherit; font-size: 12px; outline: none; min-width: 0; }
+    .anno-input::placeholder { color: var(--text-muted); }
+    .anno-del { background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 14px; padding: 0 2px; transition: color .15s; flex-shrink: 0; }
+    .anno-del:hover { color: var(--error); }
+    .anno-hint { padding: 10px 14px; font-size: 12px; color: var(--text-muted); text-align: center; }
+    .draw-ghost { fill: rgba(240,136,62,.12); stroke: var(--anno); stroke-width: 2; stroke-dasharray: 6 3; }
+    .anno-rect { fill: rgba(240,136,62,.1); stroke: var(--anno); stroke-width: 2; stroke-dasharray: 6 3; }
+    .anno-label-bg { fill: var(--anno); }
+    .anno-label-text { fill: #fff; font-size: 12px; font-weight: 700; font-family: system-ui,sans-serif; }
+
+    /* ── Docs panel ── */
+    .docs-body {
+      flex: 1; overflow-y: auto; padding: 32px 40px; background: var(--bg); min-height: 0;
+    }
+    .docs-empty {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 12px; color: var(--text-muted); text-align: center; height: 100%;
+    }
+    .docs-empty p { font-size: 13px; }
+
+    /* ── Markdown render styles ── */
+    .md-content { max-width: 720px; margin: 0 auto; color: var(--text); line-height: 1.75; }
+    .md-content h1 { font-size: 22px; font-weight: 700; color: var(--text); margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+    .md-content h2 { font-size: 16px; font-weight: 600; color: var(--text); margin-top: 28px; margin-bottom: 10px; }
+    .md-content h3 { font-size: 14px; font-weight: 600; color: var(--text-muted); margin-top: 20px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: .4px; }
+    .md-content p { font-size: 14px; color: #c9d1d9; margin-bottom: 12px; }
+    .md-content ul, .md-content ol { padding-left: 22px; margin-bottom: 12px; }
+    .md-content li { font-size: 14px; color: #c9d1d9; margin-bottom: 5px; }
+    .md-content code { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-family: "Cascadia Code","Consolas",monospace; font-size: 12px; color: #f0883e; }
+    .md-content pre { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 14px 16px; overflow-x: auto; margin-bottom: 14px; }
+    .md-content pre code { background: none; border: none; padding: 0; color: #c9d1d9; font-size: 13px; }
+    .md-content hr { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
+    .md-content strong { color: var(--text); font-weight: 600; }
+    .md-content em { color: #a5d6ff; font-style: italic; }
+    .md-content a { color: var(--border-focus); text-decoration: none; }
+    .md-content a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="topbar-logo">drawio-<span>ai</span>-kit</span>
+  <span class="topbar-sub">Architecture Diagram Generator</span>
+</div>
+
+<div class="split">
+
+  <!-- ── Left pane ── -->
+  <div class="pane-left">
+    <div class="gen-section">
+      <div>
+        <label for="desc">Description</label>
+        <textarea id="desc" placeholder="Describe your architecture…&#10;&#10;e.g. AWS data pipeline: Kinesis ingests IoT events, Lambda processes them, S3 stores raw data, Glue runs ETL, Redshift is the warehouse, Athena queries it, QuickSight serves dashboards."></textarea>
+      </div>
+      <div class="divider">or attach a document</div>
+      <div>
+        <label>Upload SA doc</label>
+        <div class="upload-area" id="uploadArea">
+          <input type="file" id="fileInput" accept=".txt,.md,.markdown,.json,.yaml,.yml">
+          <div class="upload-text"><strong>Click</strong> or drag &amp; drop</div>
+          <div class="file-name" id="fileName"></div>
+        </div>
+      </div>
+      <button class="btn-generate" id="btn">
+        <span id="btnIcon">✨</span>
+        <span id="btnText">Think &amp; Generate</span>
+      </button>
+      <div class="status" id="status"></div>
+    </div>
+
+    <!-- Files list -->
+    <div class="files-section open" id="filesSection">
+      <div class="files-header" id="filesHeader">
+        <div class="files-header-left">
+          <span>📁</span><span>Generated files</span>
+          <span class="files-count" id="filesCount">0</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px">
+          <button class="btn-refresh" id="btnRefresh" title="Refresh">↺</button>
+          <span class="files-chevron">▼</span>
+        </div>
+      </div>
+      <div class="files-body" id="filesBody">
+        <div class="files-empty">No files yet.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Right pane ── -->
+  <div class="pane-right">
+
+    <!-- Toolbar (shared) -->
+    <div class="preview-toolbar">
+      <div class="preview-toolbar-left">
+        <span>Preview</span>
+        <span class="preview-filename" id="previewFilename"></span>
+        <span class="preview-badge" id="previewBadge" style="display:none">ready</span>
+      </div>
+      <!-- Preview-only buttons -->
+      <button class="btn-icon" id="btnDraw" title="Draw annotation rectangles" disabled>✏️ Draw</button>
+      <button class="btn-icon primary" id="btnRegen" style="display:none">🔄 Update</button>
+      <!-- Docs-only buttons (hidden by default) -->
+      <button class="btn-icon" id="btnDlMd" style="display:none" title="Download .md">⬇ .md</button>
+      <!-- Common -->
+      <button class="btn-icon" id="dlBtn" disabled>⬇ .drawio</button>
+    </div>
+
+    <!-- Tab bar -->
+    <div class="tab-bar">
+      <button class="tab-btn active" id="tabBtnPreview" data-tab="preview">📊 Preview</button>
+      <button class="tab-btn" id="tabBtnDocs" data-tab="docs">
+        📄 Documentation
+        <span class="tab-badge" id="docsBadge" style="display:none">✓</span>
+      </button>
+    </div>
+
+    <!-- Preview tab -->
+    <div class="tab-panel active" id="tabPreview">
+      <div class="preview-body" id="previewBody">
+        <div class="empty-state" id="emptyState">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+            <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+            <line x1="10" y1="6.5" x2="14" y2="6.5"/><line x1="10" y1="17.5" x2="14" y2="17.5"/>
+            <line x1="6.5" y1="10" x2="6.5" y2="14"/><line x1="17.5" y1="10" x2="17.5" y2="14"/>
+          </svg>
+          <p>Generate a diagram or pick a file from the list.<br>Then use <strong>✏️ Draw</strong> to annotate &amp; refine it.</p>
+        </div>
+        <div id="imgWrapper">
+          <img id="previewImg" alt="diagram preview">
+          <svg id="annoLayer" xmlns="http://www.w3.org/2000/svg"></svg>
+        </div>
+        <div class="preview-loading" id="previewLoading">
+          <div class="ring-lg"></div>
+        </div>
+      </div>
+      <!-- Annotation panel -->
+      <div class="anno-panel collapsed" id="annoPanel">
+        <div class="anno-panel-header" id="annoPanelHeader">
+          <div class="anno-panel-left">
+            <span>✏️ Annotations</span>
+            <span class="anno-count" id="annoCount" style="display:none">0</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <button class="btn-icon" id="btnClearAnno" style="display:none;padding:3px 8px;font-size:11px">Clear all</button>
+            <span class="anno-chevron">▲</span>
+          </div>
+        </div>
+        <div class="anno-list" id="annoList">
+          <div class="anno-hint">Click <strong>✏️ Draw</strong> then drag on the preview to mark areas.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Docs tab -->
+    <div class="tab-panel" id="tabDocs">
+      <div class="docs-body" id="docsBody">
+        <div class="docs-empty" id="docsEmpty">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".3">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+          </svg>
+          <p id="docsEmptyMsg">Documentation is generated alongside each new diagram.<br>Select a file or generate one to view its docs.</p>
+          <button class="btn-icon primary" id="btnGenDocs" style="display:none">✨ Generate Docs</button>
+        </div>
+        <div class="md-content" id="mdContent" style="display:none"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── DOM refs ─────────────────────────────────────────
+const descEl          = document.getElementById("desc");
+const fileInput       = document.getElementById("fileInput");
+const uploadArea      = document.getElementById("uploadArea");
+const fileNameEl      = document.getElementById("fileName");
+const btn             = document.getElementById("btn");
+const btnIcon         = document.getElementById("btnIcon");
+const btnText         = document.getElementById("btnText");
+const statusEl        = document.getElementById("status");
+const previewFilename = document.getElementById("previewFilename");
+const previewBadge    = document.getElementById("previewBadge");
+const previewImg      = document.getElementById("previewImg");
+const imgWrapper      = document.getElementById("imgWrapper");
+const annoLayer       = document.getElementById("annoLayer");
+const emptyState      = document.getElementById("emptyState");
+const previewBody     = document.getElementById("previewBody");
+const previewLoading  = document.getElementById("previewLoading");
+const dlBtn           = document.getElementById("dlBtn");
+const btnDlMd         = document.getElementById("btnDlMd");
+const btnDraw         = document.getElementById("btnDraw");
+const btnRegen        = document.getElementById("btnRegen");
+const annoPanel       = document.getElementById("annoPanel");
+const annoPanelHeader = document.getElementById("annoPanelHeader");
+const annoList        = document.getElementById("annoList");
+const annoCount       = document.getElementById("annoCount");
+const btnClearAnno    = document.getElementById("btnClearAnno");
+const filesSection    = document.getElementById("filesSection");
+const filesHeader     = document.getElementById("filesHeader");
+const filesBody       = document.getElementById("filesBody");
+const filesCount      = document.getElementById("filesCount");
+const btnRefresh      = document.getElementById("btnRefresh");
+const tabBtnPreview   = document.getElementById("tabBtnPreview");
+const tabBtnDocs      = document.getElementById("tabBtnDocs");
+const tabPreview      = document.getElementById("tabPreview");
+const tabDocs         = document.getElementById("tabDocs");
+const docsEmpty       = document.getElementById("docsEmpty");
+const docsEmptyMsg    = document.getElementById("docsEmptyMsg");
+const btnGenDocs      = document.getElementById("btnGenDocs");
+const mdContent       = document.getElementById("mdContent");
+const docsBadge       = document.getElementById("docsBadge");
+
+// ── State ─────────────────────────────────────────────
+let fileContent = "";
+let currentFilename = "";
+let activeFileItem = null;
+let drawMode = false;
+let annotations = [];
+let annoIdSeq = 0;
+let currentTab = "preview";
+let currentDocs = "";  // loaded docs content for current file
+
+// ── Markdown renderer ─────────────────────────────────
+function escHtml(s) {
+  return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+function inlineMd(text) {
+  return escHtml(text)
+    .replace(/\*\*\*(.+?)\*\*\*/g, "<strong><em>$1</em></strong>")
+    .replace(/\*\*(.+?)\*\*/g,     "<strong>$1</strong>")
+    .replace(/\*([^*]+?)\*/g,      "<em>$1</em>")
+    .replace(/`([^`]+)`/g,         "<code>$1</code>")
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+}
+function renderMarkdown(md) {
+  const lines = md.split("\n");
+  let html = "";
+  let inPre = false, preBuf = "";
+  let inUl = false, inOl = false;
+
+  function closeList() {
+    if (inUl) { html += "</ul>"; inUl = false; }
+    if (inOl) { html += "</ol>"; inOl = false; }
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Code fence
+    if (line.startsWith("```")) {
+      if (inPre) {
+        html += `<pre><code>${escHtml(preBuf.replace(/\n$/, ""))}</code></pre>`;
+        inPre = false; preBuf = "";
+      } else {
+        closeList(); inPre = true;
+      }
+      continue;
+    }
+    if (inPre) { preBuf += line + "\n"; continue; }
+
+    // Blank line
+    if (!line.trim()) { closeList(); html += ""; continue; }
+
+    // HR
+    if (/^---+$/.test(line)) { closeList(); html += "<hr>"; continue; }
+
+    // Headers
+    const h1 = line.match(/^# (.+)/);
+    const h2 = line.match(/^## (.+)/);
+    const h3 = line.match(/^### (.+)/);
+    if (h1) { closeList(); html += `<h1>${inlineMd(h1[1])}</h1>`; continue; }
+    if (h2) { closeList(); html += `<h2>${inlineMd(h2[1])}</h2>`; continue; }
+    if (h3) { closeList(); html += `<h3>${inlineMd(h3[1])}</h3>`; continue; }
+
+    // Unordered list
+    const ulM = line.match(/^[-*] (.+)/);
+    if (ulM) {
+      if (inOl) { html += "</ol>"; inOl = false; }
+      if (!inUl) { html += "<ul>"; inUl = true; }
+      html += `<li>${inlineMd(ulM[1])}</li>`;
+      continue;
+    }
+    // Ordered list
+    const olM = line.match(/^\d+\. (.+)/);
+    if (olM) {
+      if (inUl) { html += "</ul>"; inUl = false; }
+      if (!inOl) { html += "<ol>"; inOl = true; }
+      html += `<li>${inlineMd(olM[1])}</li>`;
+      continue;
+    }
+
+    // Paragraph
+    closeList();
+    html += `<p>${inlineMd(line)}</p>`;
+  }
+  closeList();
+  if (inPre) html += `<pre><code>${escHtml(preBuf)}</code></pre>`;
+  return html;
+}
+
+// ── Tab switching ─────────────────────────────────────
+function switchTab(tab) {
+  currentTab = tab;
+  const isPreview = tab === "preview";
+  tabBtnPreview.classList.toggle("active", isPreview);
+  tabBtnDocs.classList.toggle("active", !isPreview);
+  tabPreview.classList.toggle("active", isPreview);
+  tabDocs.classList.toggle("active", !isPreview);
+  btnDraw.style.display  = isPreview ? "" : "none";
+  btnRegen.style.display = (isPreview && annotations.length && currentFilename) ? "" : "none";
+  btnDlMd.style.display  = (!isPreview && currentFilename) ? "" : "none";
+
+  if (!isPreview && currentFilename) loadDocs(currentFilename);
+}
+tabBtnPreview.addEventListener("click", () => switchTab("preview"));
+tabBtnDocs.addEventListener("click",    () => switchTab("docs"));
+
+async function loadDocs(filename) {
+  const mdFile = filename.replace(".drawio", ".md");
+  docsEmpty.style.display = "none";
+  mdContent.style.display = "none";
+  mdContent.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:200px"><div class="ring-lg"></div></div>';
+  mdContent.style.display = "block";
+  try {
+    const res = await fetch(`/api/docs?file=${encodeURIComponent(mdFile)}`);
+    const data = await res.json();
+    if (!res.ok) {
+      mdContent.style.display = "none";
+      docsEmpty.style.display = "flex";
+      docsEmptyMsg.textContent = "No documentation found for this file.";
+      btnGenDocs.style.display = currentFilename ? "" : "none";
+      docsBadge.style.display = "none";
+      currentDocs = "";
+      btnDlMd.style.display = "none";
+    } else {
+      currentDocs = data.content;
+      mdContent.innerHTML = renderMarkdown(data.content);
+      mdContent.style.display = "block";
+      docsEmpty.style.display = "none";
+      btnGenDocs.style.display = "none";
+      docsBadge.style.display = "";
+      btnDlMd.style.display = currentTab === "docs" ? "" : "none";
+    }
+  } catch {
+    mdContent.style.display = "none";
+    docsEmpty.style.display = "flex";
+    docsEmptyMsg.textContent = "Could not load documentation.";
+    currentDocs = "";
+  }
+}
+
+// Generate docs for an existing file that has no .md
+btnGenDocs.addEventListener("click", async () => {
+  if (!currentFilename) return;
+  btnGenDocs.disabled = true;
+  btnGenDocs.textContent = "Generating…";
+  docsEmptyMsg.textContent = "Claude is writing the documentation…";
+  try {
+    const res = await fetch("/api/generate-docs", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filename: currentFilename }),
+    });
+    const data = await res.json();
+    if (!res.ok) { docsEmptyMsg.textContent = "Error: " + (data.error ?? "Failed"); btnGenDocs.textContent = "✨ Generate Docs"; btnGenDocs.disabled = false; return; }
+    currentDocs = data.content;
+    mdContent.innerHTML = renderMarkdown(data.content);
+    mdContent.style.display = "block";
+    docsEmpty.style.display = "none";
+    btnGenDocs.style.display = "none";
+    docsBadge.style.display = "";
+    btnDlMd.style.display = "";
+  } catch (err) {
+    docsEmptyMsg.textContent = "Error: " + err.message;
+    btnGenDocs.textContent = "✨ Generate Docs"; btnGenDocs.disabled = false;
+  }
+});
+
+// ── File upload (SA doc) ──────────────────────────────
+fileInput.addEventListener("change", () => readFile(fileInput.files[0]));
+uploadArea.addEventListener("dragover",  e => { e.preventDefault(); uploadArea.classList.add("drag-over"); });
+uploadArea.addEventListener("dragleave", () => uploadArea.classList.remove("drag-over"));
+uploadArea.addEventListener("drop", e => { e.preventDefault(); uploadArea.classList.remove("drag-over"); readFile(e.dataTransfer.files[0]); });
+function readFile(file) {
+  if (!file) return;
+  fileNameEl.textContent = file.name;
+  uploadArea.classList.add("has-file");
+  const fr = new FileReader();
+  fr.onload = e => { fileContent = e.target.result ?? ""; };
+  fr.readAsText(file);
+}
+
+// ── Generate ──────────────────────────────────────────
+function setThinking(msg = "Claude is designing your diagram…") {
+  btn.disabled = true;
+  btnIcon.innerHTML = '<div class="ring"></div>';
+  btnText.textContent = "Thinking…";
+  statusEl.className = "status thinking";
+  statusEl.innerHTML = `<div class="ring"></div><span>${msg}</span>`;
+  previewLoading.classList.add("visible");
+}
+function setIdle() {
+  btn.disabled = false;
+  btnIcon.textContent = "✨";
+  btnText.textContent = "Think & Generate";
+  previewLoading.classList.remove("visible");
+}
+function showError(msg) {
+  setIdle();
+  statusEl.className = "status error";
+  statusEl.textContent = "Error: " + msg;
+}
+
+btn.addEventListener("click", async () => {
+  const desc = descEl.value.trim();
+  if (!desc && !fileContent) { descEl.focus(); return; }
+  const fullDesc = [desc, fileContent ? "--- Attached ---\n" + fileContent : ""].filter(Boolean).join("\n\n");
+  setThinking();
+  try {
+    const res = await fetch("/api/generate", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ description: fullDesc }),
+    });
+    const data = await res.json();
+    if (!res.ok) { showError(data.error ?? res.statusText); return; }
+    setIdle(); statusEl.className = ""; statusEl.style.display = "none";
+    showPreview(data.filename, data.preview);
+    clearAnnotations();
+    loadFiles();
+    switchTab("preview");
+  } catch (err) { showError(err.message); }
+});
+
+// ── Preview ───────────────────────────────────────────
+function showPreview(filename, previewDataUrl) {
+  currentFilename = filename;
+  currentDocs = "";
+  previewFilename.textContent = filename;
+  previewBadge.style.display = "";
+  dlBtn.disabled = false;
+  btnDraw.disabled = false;
+  emptyState.style.display = "none";
+  docsBadge.style.display = "none";
+  mdContent.innerHTML = "";
+  mdContent.style.display = "none";
+  docsEmpty.style.display = "flex";
+  docsEmpty.innerHTML = `<p style="color:var(--text-muted)">Documentation will be available in the <strong>Documentation</strong> tab.</p>`;
+  if (previewDataUrl) {
+    previewImg.src = previewDataUrl;
+    previewImg.style.display = "block";
+  }
+  renderAnnotations();
+  // Check if docs file exists (for files loaded from list)
+  const mdFile = filename.replace(".drawio", ".md");
+  fetch(`/api/docs?file=${encodeURIComponent(mdFile)}`).then(r => {
+    if (r.ok) { docsBadge.style.display = ""; if (currentTab === "docs") loadDocs(filename); }
+  }).catch(() => {});
+}
+
+dlBtn.addEventListener("click", () => {
+  if (!currentFilename) return;
+  const a = document.createElement("a");
+  a.href = `/api/out/${encodeURIComponent(currentFilename)}`; a.download = currentFilename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+});
+
+btnDlMd.addEventListener("click", () => {
+  if (!currentDocs) return;
+  const blob = new Blob([currentDocs], { type: "text/markdown" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = currentFilename.replace(".drawio", ".md");
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+});
+
+// ── Draw mode ─────────────────────────────────────────
+btnDraw.addEventListener("click", () => {
+  drawMode = !drawMode;
+  btnDraw.classList.toggle("active", drawMode);
+  annoLayer.classList.toggle("draw-mode", drawMode);
+  annoPanel.classList.toggle("collapsed", false);
+});
+
+let isDrawing = false, dragStartX = 0, dragStartY = 0;
+let ghostRect = null;
+
+annoLayer.addEventListener("mousedown", e => {
+  if (!drawMode) return;
+  e.preventDefault();
+  isDrawing = true;
+  const r = annoLayer.getBoundingClientRect();
+  dragStartX = (e.clientX - r.left) / r.width;
+  dragStartY = (e.clientY - r.top) / r.height;
+  ghostRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  ghostRect.setAttribute("class", "draw-ghost");
+  annoLayer.appendChild(ghostRect);
+});
+
+window.addEventListener("mousemove", e => {
+  if (!isDrawing || !ghostRect) return;
+  const r = annoLayer.getBoundingClientRect();
+  const cx = (e.clientX - r.left) / r.width;
+  const cy = (e.clientY - r.top) / r.height;
+  const nx = Math.min(dragStartX, cx), ny = Math.min(dragStartY, cy);
+  const nw = Math.abs(cx - dragStartX), nh = Math.abs(cy - dragStartY);
+  ghostRect.setAttribute("x",      (nx * 100) + "%");
+  ghostRect.setAttribute("y",      (ny * 100) + "%");
+  ghostRect.setAttribute("width",  (nw * 100) + "%");
+  ghostRect.setAttribute("height", (nh * 100) + "%");
+});
+
+window.addEventListener("mouseup", e => {
+  if (!isDrawing) return;
+  isDrawing = false;
+  if (ghostRect) { ghostRect.remove(); ghostRect = null; }
+  const r = annoLayer.getBoundingClientRect();
+  const cx = (e.clientX - r.left) / r.width;
+  const cy = (e.clientY - r.top) / r.height;
+  const nx = Math.min(dragStartX, cx), ny = Math.min(dragStartY, cy);
+  const nw = Math.abs(cx - dragStartX), nh = Math.abs(cy - dragStartY);
+  if (nw < 0.02 || nh < 0.02) return;
+  const position = positionLabel(nx + nw/2, ny + nh/2);
+  const ann = { id: ++annoIdSeq, nx, ny, nw, nh, text: "", position };
+  annotations.push(ann);
+  renderAnnotations();
+  updateAnnoPanel();
+  setTimeout(() => { document.querySelector(`.anno-input[data-id="${ann.id}"]`)?.focus(); }, 50);
+});
+
+function positionLabel(cx, cy) {
+  const h = cx < 0.33 ? "left" : cx > 0.66 ? "right" : "center";
+  const v = cy < 0.33 ? "top"  : cy > 0.66 ? "bottom" : "middle";
+  return `${v}-${h}`;
+}
+
+// ── Annotation SVG rendering ──────────────────────────
+function renderAnnotations() {
+  annoLayer.innerHTML = "";
+  annotations.forEach((ann, i) => {
+    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    rect.setAttribute("class", "anno-rect");
+    rect.setAttribute("x",      (ann.nx * 100) + "%");
+    rect.setAttribute("y",      (ann.ny * 100) + "%");
+    rect.setAttribute("width",  (ann.nw * 100) + "%");
+    rect.setAttribute("height", (ann.nh * 100) + "%");
+    g.appendChild(rect);
+    const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    bg.setAttribute("class", "anno-label-bg");
+    bg.setAttribute("x", (ann.nx * 100) + "%"); bg.setAttribute("y", (ann.ny * 100) + "%");
+    bg.setAttribute("width", "20"); bg.setAttribute("height", "18"); bg.setAttribute("rx", "3");
+    g.appendChild(bg);
+    const txt = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    txt.setAttribute("class", "anno-label-text");
+    txt.setAttribute("x", (ann.nx * 100) + "%"); txt.setAttribute("y", (ann.ny * 100) + "%");
+    txt.setAttribute("dx", "4"); txt.setAttribute("dy", "13");
+    txt.textContent = i + 1;
+    g.appendChild(txt);
+    if (ann.text) {
+      const preview = ann.text.length > 28 ? ann.text.slice(0, 26) + "…" : ann.text;
+      const pbg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      pbg.setAttribute("x", (ann.nx * 100) + "%");
+      pbg.setAttribute("y", ((ann.ny + ann.nh) * 100 - 3) + "%");
+      pbg.setAttribute("width", Math.min(ann.nw * 100, 60) + "%");
+      pbg.setAttribute("height", "20"); pbg.setAttribute("rx", "3"); pbg.setAttribute("fill", "rgba(15,17,23,0.8)");
+      g.appendChild(pbg);
+      const ptxt = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      ptxt.setAttribute("x", (ann.nx * 100 + 1) + "%");
+      ptxt.setAttribute("y", ((ann.ny + ann.nh) * 100) + "%"); ptxt.setAttribute("dy", "13");
+      ptxt.setAttribute("font-size", "11"); ptxt.setAttribute("font-family", "system-ui,sans-serif"); ptxt.setAttribute("fill", "#e6edf3");
+      ptxt.textContent = preview;
+      g.appendChild(ptxt);
+    }
+    annoLayer.appendChild(g);
+  });
+}
+
+// ── Annotation panel ──────────────────────────────────
+annoPanelHeader.addEventListener("click", () => annoPanel.classList.toggle("collapsed"));
+
+function updateAnnoPanel() {
+  const count = annotations.length;
+  annoCount.textContent = count;
+  annoCount.style.display = count ? "" : "none";
+  btnClearAnno.style.display = count ? "" : "none";
+  btnRegen.style.display = (count && currentFilename && currentTab === "preview") ? "" : "none";
+  annoList.innerHTML = "";
+  if (!count) {
+    const hint = document.createElement("div");
+    hint.className = "anno-hint";
+    hint.innerHTML = "Click <strong>✏️ Draw</strong> then drag on the preview to mark areas.";
+    annoList.appendChild(hint);
+    return;
+  }
+  annotations.forEach((ann, i) => {
+    const item = document.createElement("div");
+    item.className = "anno-item";
+    item.innerHTML = `
+      <div class="anno-num">${i + 1}</div>
+      <span class="anno-pos">[${ann.position}]</span>
+      <input class="anno-input" data-id="${ann.id}" placeholder="Describe what to change here…" value="${ann.text.replace(/"/g,"&quot;")}">
+      <button class="anno-del" data-id="${ann.id}" title="Remove">×</button>`;
+    item.querySelector(".anno-input").addEventListener("input", e => {
+      const a = annotations.find(x => x.id === +e.target.dataset.id);
+      if (a) { a.text = e.target.value; renderAnnotations(); }
+    });
+    item.querySelector(".anno-del").addEventListener("click", e => {
+      const id = +e.currentTarget.dataset.id;
+      annotations = annotations.filter(x => x.id !== id);
+      renderAnnotations(); updateAnnoPanel();
+    });
+    annoList.appendChild(item);
+  });
+}
+
+btnClearAnno.addEventListener("click", clearAnnotations);
+function clearAnnotations() {
+  annotations = [];
+  renderAnnotations(); updateAnnoPanel();
+  if (drawMode) { drawMode = false; btnDraw.classList.remove("active"); annoLayer.classList.remove("draw-mode"); }
+}
+
+// ── Regenerate with annotations ───────────────────────
+btnRegen.addEventListener("click", async () => {
+  const filledAnno = annotations.filter(a => a.text.trim());
+  if (!filledAnno.length) { alert("Please add a description to at least one annotation before updating."); return; }
+  const desc = descEl.value.trim() || `Modify the existing ${currentFilename} diagram`;
+  setThinking("Updating diagram with your annotations…");
+  drawMode = false; btnDraw.classList.remove("active"); annoLayer.classList.remove("draw-mode");
+  try {
+    const res = await fetch("/api/generate", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ description: desc, annotations: filledAnno.map(a => ({ text: a.text, position: a.position })) }),
+    });
+    const data = await res.json();
+    if (!res.ok) { showError(data.error ?? res.statusText); return; }
+    setIdle(); statusEl.className = ""; statusEl.style.display = "none";
+    showPreview(data.filename, data.preview);
+    clearAnnotations(); loadFiles();
+  } catch (err) { showError(err.message); }
+});
+
+// ── Files list ────────────────────────────────────────
+filesHeader.addEventListener("click", e => {
+  if (e.target === btnRefresh || btnRefresh.contains(e.target)) return;
+  filesSection.classList.toggle("open");
+});
+btnRefresh.addEventListener("click", e => { e.stopPropagation(); loadFiles(); });
+
+async function loadFiles() {
+  try {
+    const files = await (await fetch("/api/out")).json();
+    filesCount.textContent = files.length;
+    filesBody.innerHTML = "";
+    if (!files.length) {
+      filesBody.innerHTML = '<div class="files-empty">No files yet.</div>';
+      return;
+    }
+    for (const name of files) {
+      const item = document.createElement("div");
+      item.className = "file-item" + (name === currentFilename ? " active" : "");
+      if (name === currentFilename) activeFileItem = item;
+      item.innerHTML = `<span>📄</span><span class="file-item-name" title="${name}">${name}</span><button class="file-item-dl" title="Download .drawio">⬇</button>`;
+      item.addEventListener("click", async e => {
+        if (e.target.classList.contains("file-item-dl") || e.target.closest(".file-item-dl")) return;
+        if (activeFileItem) activeFileItem.classList.remove("active");
+        item.classList.add("active"); activeFileItem = item;
+        previewLoading.classList.add("visible");
+        emptyState.style.display = "none";
+        try {
+          const res = await fetch(`/api/preview?file=${encodeURIComponent(name)}`);
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error);
+          showPreview(data.filename, data.preview);
+          clearAnnotations();
+          if (currentTab === "docs") loadDocs(name);
+        } catch (err) { console.error(err); }
+        finally { previewLoading.classList.remove("visible"); }
+      });
+      item.querySelector(".file-item-dl").addEventListener("click", e => {
+        e.stopPropagation();
+        const a = document.createElement("a");
+        a.href = `/api/out/${encodeURIComponent(name)}`; a.download = name;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      });
+      filesBody.appendChild(item);
+    }
+  } catch {}
+}
+
+// ── Init ──────────────────────────────────────────────
+loadFiles();
+</script>
+</body>
+</html>
