@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="vi">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>drawio-ai-kit · Diagram Generator</title>
+  <title>Kỹ sư kiến trúc · Trình Tạo Sơ Đồ</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -43,40 +43,61 @@
     }
     .gen-section { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
 
-    label { font-size: 11px; font-weight: 600; color: var(--text-muted); display: block; margin-bottom: 5px; text-transform: uppercase; letter-spacing: .5px; }
-    textarea {
-      width: 100%; min-height: 150px;
-      background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    /* ── Prompt input ── */
+    .prompt-box {
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 18px;
+      padding: 12px 12px 10px 14px; display: flex; flex-direction: column; gap: 8px;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .prompt-box:focus-within {
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 3px rgba(88,166,255,.1);
+    }
+    .prompt-box.drag-over { border-color: var(--border-focus); background: rgba(88,166,255,.06); }
+    .prompt-files { display: flex; flex-wrap: wrap; gap: 6px; }
+    .prompt-file-chip {
+      display: flex; align-items: center; gap: 5px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 4px 8px 4px 8px; font-size: 12px;
+    }
+    .prompt-file-chip-name { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); }
+    .prompt-file-chip-rm {
+      background: none; border: none; cursor: pointer; color: var(--text-muted);
+      padding: 2px; border-radius: 50%; display: flex; align-items: center;
+      transition: color .15s, background .15s;
+    }
+    .prompt-file-chip-rm:hover { color: var(--error); background: rgba(248,81,73,.12); }
+    .prompt-textarea {
+      width: 100%; min-height: 160px; max-height: 320px;
+      background: transparent; border: none; outline: none; resize: none; overflow-y: auto;
       color: var(--text); font-family: inherit; font-size: 13px; line-height: 1.6;
-      padding: 10px 12px; resize: vertical; outline: none; transition: border-color .15s;
     }
-    textarea:focus { border-color: var(--border-focus); }
-    textarea::placeholder { color: var(--text-muted); font-size: 12px; }
-
-    .upload-area {
-      border: 1px dashed var(--border); border-radius: 6px; padding: 12px 16px;
-      text-align: center; cursor: pointer; transition: border-color .15s, background .15s;
-      position: relative; font-size: 12px;
+    .prompt-textarea::placeholder { color: var(--text-muted); font-size: 12px; }
+    .prompt-actions { display: flex; align-items: center; justify-content: space-between; }
+    .prompt-actions-left { display: flex; align-items: center; gap: 2px; }
+    .prompt-attach-label {
+      display: flex; align-items: center; justify-content: center;
+      width: 32px; height: 32px; border-radius: 50%; cursor: pointer;
+      color: var(--text-muted); transition: color .15s, background .15s;
     }
-    .upload-area:hover { border-color: var(--border-focus); background: rgba(88,166,255,.04); }
-    .upload-area.drag-over { border-color: var(--border-focus); background: rgba(88,166,255,.08); }
-    .upload-area.has-file { border-color: var(--accent); background: rgba(35,134,54,.06); }
-    .upload-area input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-    .upload-text { color: var(--text-muted); }
-    .upload-text strong { color: var(--text); }
-    .file-name { color: #3fb950; font-weight: 500; margin-top: 3px; }
-
-    .divider { display: flex; align-items: center; gap: 10px; color: var(--text-muted); font-size: 11px; }
-    .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
-
-    .btn-generate {
-      width: 100%; padding: 11px 16px;
-      background: var(--accent); color: #fff; border: none; border-radius: 6px;
-      font-size: 14px; font-weight: 600; cursor: pointer; transition: background .15s;
-      display: flex; align-items: center; justify-content: center; gap: 8px;
+    .prompt-attach-label:hover { color: var(--text); background: rgba(88,166,255,.1); }
+    .prompt-reset-btn {
+      display: flex; align-items: center; justify-content: center;
+      width: 30px; height: 30px; border-radius: 50%; cursor: pointer;
+      background: none; border: none; color: var(--text-muted);
+      transition: color .15s, background .15s;
     }
-    .btn-generate:hover:not(:disabled) { background: var(--accent-hover); }
-    .btn-generate:disabled { background: var(--surface2); color: var(--text-muted); cursor: not-allowed; }
+    .prompt-reset-btn:hover { color: var(--error); background: rgba(248,81,73,.1); }
+    .prompt-send-btn {
+      display: flex; align-items: center; justify-content: center;
+      width: 34px; height: 34px; border-radius: 50%; cursor: pointer; flex-shrink: 0;
+      background: var(--accent); border: none; color: #fff;
+      transition: background .15s, transform .1s;
+    }
+    .prompt-send-btn:hover:not(:disabled) { background: var(--accent-hover); }
+    .prompt-send-btn:active:not(:disabled) { transform: scale(.92); }
+    .prompt-send-btn:disabled { background: var(--surface); color: var(--text-muted); cursor: not-allowed; border: 1px solid var(--border); }
+    .prompt-send-btn .ring { width: 14px; height: 14px; border-width: 2px; }
 
     .ring { width: 16px; height: 16px; flex-shrink: 0; border: 2px solid rgba(210,153,34,.3); border-top-color: var(--thinking); border-radius: 50%; animation: spin .8s linear infinite; }
     .ring-lg { width: 32px; height: 32px; border: 3px solid rgba(88,166,255,.2); border-top-color: var(--border-focus); border-radius: 50%; animation: spin .8s linear infinite; }
@@ -86,26 +107,40 @@
     .status.thinking { display: flex; align-items: center; gap: 8px; background: rgba(210,153,34,.1); border: 1px solid rgba(210,153,34,.3); color: var(--thinking); }
     .status.error { display: block; background: rgba(248,81,73,.1); border: 1px solid rgba(248,81,73,.3); color: var(--error); }
 
-    /* ── Files in out/ ── */
-    .files-section { flex-shrink: 0; border-top: 1px solid var(--border); }
-    .files-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; cursor: pointer; user-select: none; background: var(--surface2); }
-    .files-header:hover { background: #2d333b; }
-    .files-header-left { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 500; }
-    .files-chevron { transition: transform .2s; font-size: 10px; color: var(--text-muted); }
-    .files-section.open .files-chevron { transform: rotate(180deg); }
-    .files-count { font-size: 11px; padding: 1px 7px; background: var(--surface); border-radius: 10px; color: var(--text-muted); }
+    /* ── File tree ── */
+    .file-tree-wrap { flex-shrink: 0; border-top: 1px solid var(--border); display: flex; flex-direction: column; background: var(--surface); }
+    .file-tree-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 7px 12px; background: var(--surface2); border-bottom: 1px solid rgba(48,54,61,.7);
+      flex-shrink: 0;
+    }
+    .file-tree-dots { display: flex; gap: 5px; align-items: center; }
+    .file-tree-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .file-tree-label { font-size: 11px; color: var(--text-muted); margin-left: 8px; font-family: monospace; letter-spacing: .3px; }
+    .file-tree-count { font-size: 10px; padding: 1px 6px; background: var(--surface); border-radius: 10px; color: var(--text-muted); margin-left: 6px; }
     .btn-refresh { background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 13px; padding: 2px 6px; border-radius: 4px; transition: color .15s, background .15s; }
     .btn-refresh:hover { color: var(--text); background: var(--border); }
-    .files-body { display: none; max-height: 200px; overflow-y: auto; }
-    .files-section.open .files-body { display: block; }
-    .file-item { display: flex; align-items: center; gap: 10px; padding: 7px 16px; cursor: pointer; font-size: 12px; border-bottom: 1px solid var(--border); transition: background .12s; }
-    .file-item:last-child { border-bottom: none; }
-    .file-item:hover { background: var(--surface2); }
-    .file-item.active { background: rgba(88,166,255,.08); }
-    .file-item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
-    .file-item-dl { flex-shrink: 0; background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 12px; padding: 2px 6px; border-radius: 4px; transition: color .15s, background .15s; }
-    .file-item-dl:hover { color: var(--text); background: var(--border); }
-    .files-empty { padding: 16px; font-size: 12px; color: var(--text-muted); text-align: center; }
+    .file-tree-body { overflow-y: auto; max-height: 215px; padding: 4px; }
+    .file-tree-item {
+      display: flex; align-items: center; gap: 6px;
+      padding: 5px 8px; border-radius: 5px; cursor: pointer;
+      font-family: monospace; font-size: 12px; position: relative;
+      transition: background .15s;
+    }
+    .file-tree-item:hover { background: rgba(88,166,255,.07); }
+    .file-tree-item.active { background: rgba(88,166,255,.12); }
+    .ft-arrow { color: var(--text-muted); font-size: 9px; flex-shrink: 0; opacity: .5; transition: opacity .15s; }
+    .file-tree-item:hover .ft-arrow { opacity: 1; }
+    .ft-file-icon { flex-shrink: 0; }
+    .ft-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); transition: color .15s; }
+    .file-tree-item:hover .ft-name,
+    .file-tree-item.active .ft-name { color: var(--text); }
+    .ft-dl { flex-shrink: 0; background: none; border: none; cursor: pointer; color: transparent; font-size: 11px; padding: 2px 5px; border-radius: 3px; transition: color .15s, background .15s; }
+    .file-tree-item:hover .ft-dl { color: var(--text-muted); }
+    .ft-dl:hover { color: var(--text) !important; background: var(--border); }
+    .ft-dot { position: absolute; right: 8px; width: 5px; height: 5px; border-radius: 50%; background: var(--border-focus); opacity: 0; transform: scale(0); transition: opacity .2s, transform .2s; pointer-events: none; }
+    .file-tree-item:hover .ft-dot { opacity: 1; transform: scale(1); }
+    .file-tree-empty { padding: 16px; font-size: 12px; color: var(--text-muted); text-align: center; font-family: monospace; }
 
     /* ── Right pane ── */
     .pane-right { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
@@ -238,8 +273,8 @@
 <body>
 
 <div class="topbar">
-  <span class="topbar-logo">drawio-<span>ai</span>-kit</span>
-  <span class="topbar-sub">Architecture Diagram Generator</span>
+  <span class="topbar-logo">Kỹ sư <span>kiến trúc</span></span>
+  <span class="topbar-sub">Trình Tạo Sơ Đồ Kiến Trúc</span>
 </div>
 
 <div class="split">
@@ -247,40 +282,55 @@
   <!-- ── Left pane ── -->
   <div class="pane-left">
     <div class="gen-section">
-      <div>
-        <label for="desc">Description</label>
-        <textarea id="desc" placeholder="Describe your architecture…&#10;&#10;e.g. AWS data pipeline: Kinesis ingests IoT events, Lambda processes them, S3 stores raw data, Glue runs ETL, Redshift is the warehouse, Athena queries it, QuickSight serves dashboards."></textarea>
-      </div>
-      <div class="divider">or attach a document</div>
-      <div>
-        <label>Upload SA doc</label>
-        <div class="upload-area" id="uploadArea">
-          <input type="file" id="fileInput" accept=".txt,.md,.markdown,.json,.yaml,.yml">
-          <div class="upload-text"><strong>Click</strong> or drag &amp; drop</div>
-          <div class="file-name" id="fileName"></div>
+      <div class="prompt-box" id="promptBox">
+        <!-- Attached file chips -->
+        <div class="prompt-files" id="promptFiles" style="display:none"></div>
+        <!-- Textarea -->
+        <textarea id="desc" class="prompt-textarea" rows="8"
+          placeholder="Mô tả kiến trúc của bạn…&#10;&#10;Ví dụ: Pipeline dữ liệu AWS: Kinesis nhận sự kiện IoT, Lambda xử lý, S3 lưu raw data, Glue chạy ETL, Redshift làm kho dữ liệu, Athena truy vấn, QuickSight tạo dashboard."></textarea>
+        <!-- Actions bar -->
+        <div class="prompt-actions">
+          <div class="prompt-actions-left">
+            <label class="prompt-attach-label" for="fileInput" title="Đính kèm tài liệu SA (.txt, .md, .json, .yaml)">
+              <input type="file" id="fileInput" accept=".txt,.md,.markdown,.json,.yaml,.yml" style="display:none">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+              </svg>
+            </label>
+            <button class="prompt-reset-btn" id="btnReset" title="Xóa mô tả và tài liệu đã tải lên">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                <path d="M18 6 6 18M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+          <button class="prompt-send-btn" id="btn" title="Phân tích &amp; Tạo sơ đồ">
+            <span id="btnIcon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 19V5M5 12l7-7 7 7"/>
+              </svg>
+            </span>
+          </button>
         </div>
       </div>
-      <button class="btn-generate" id="btn">
-        <span id="btnIcon">✨</span>
-        <span id="btnText">Think &amp; Generate</span>
-      </button>
       <div class="status" id="status"></div>
     </div>
 
-    <!-- Files list -->
-    <div class="files-section open" id="filesSection">
-      <div class="files-header" id="filesHeader">
-        <div class="files-header-left">
-          <span>📁</span><span>Generated files</span>
-          <span class="files-count" id="filesCount">0</span>
+    <!-- File tree -->
+    <div class="file-tree-wrap" id="filesSection">
+      <div class="file-tree-header">
+        <div style="display:flex;align-items:center">
+          <div class="file-tree-dots">
+            <div class="file-tree-dot" style="background:#ff5f57"></div>
+            <div class="file-tree-dot" style="background:#febc2e"></div>
+            <div class="file-tree-dot" style="background:#28c840"></div>
+          </div>
+          <span class="file-tree-label">kết quả</span>
+          <span class="file-tree-count" id="filesCount">0</span>
         </div>
-        <div style="display:flex;align-items:center;gap:4px">
-          <button class="btn-refresh" id="btnRefresh" title="Refresh">↺</button>
-          <span class="files-chevron">▼</span>
-        </div>
+        <button class="btn-refresh" id="btnRefresh" title="Làm mới">↺</button>
       </div>
-      <div class="files-body" id="filesBody">
-        <div class="files-empty">No files yet.</div>
+      <div class="file-tree-body" id="filesBody">
+        <div class="file-tree-empty">Chưa có tệp nào.</div>
       </div>
     </div>
   </div>
@@ -291,24 +341,24 @@
     <!-- Toolbar (shared) -->
     <div class="preview-toolbar">
       <div class="preview-toolbar-left">
-        <span>Preview</span>
+        <span>Xem trước</span>
         <span class="preview-filename" id="previewFilename"></span>
-        <span class="preview-badge" id="previewBadge" style="display:none">ready</span>
+        <span class="preview-badge" id="previewBadge" style="display:none">sẵn sàng</span>
       </div>
       <!-- Preview-only buttons -->
-      <button class="btn-icon" id="btnDraw" title="Draw annotation rectangles" disabled>✏️ Draw</button>
-      <button class="btn-icon primary" id="btnRegen" style="display:none">🔄 Update</button>
+      <button class="btn-icon" id="btnDraw" title="Vẽ khung chú thích" disabled>✏️ Vẽ</button>
+      <button class="btn-icon primary" id="btnRegen" style="display:none">🔄 Cập nhật</button>
       <!-- Docs-only buttons (hidden by default) -->
-      <button class="btn-icon" id="btnDlMd" style="display:none" title="Download .md">⬇ .md</button>
+      <button class="btn-icon" id="btnDlMd" style="display:none" title="Tải về .md">⬇ .md</button>
       <!-- Common -->
-      <button class="btn-icon" id="dlBtn" disabled>⬇ .drawio</button>
+      <button class="btn-icon" id="dlBtn" disabled title="Tải về .drawio">⬇ .drawio</button>
     </div>
 
     <!-- Tab bar -->
     <div class="tab-bar">
-      <button class="tab-btn active" id="tabBtnPreview" data-tab="preview">📊 Preview</button>
+      <button class="tab-btn active" id="tabBtnPreview" data-tab="preview">📊 Xem trước</button>
       <button class="tab-btn" id="tabBtnDocs" data-tab="docs">
-        📄 Documentation
+        📄 Tài liệu
         <span class="tab-badge" id="docsBadge" style="display:none">✓</span>
       </button>
     </div>
@@ -323,10 +373,10 @@
             <line x1="10" y1="6.5" x2="14" y2="6.5"/><line x1="10" y1="17.5" x2="14" y2="17.5"/>
             <line x1="6.5" y1="10" x2="6.5" y2="14"/><line x1="17.5" y1="10" x2="17.5" y2="14"/>
           </svg>
-          <p>Generate a diagram or pick a file from the list.<br>Then use <strong>✏️ Draw</strong> to annotate &amp; refine it.</p>
+          <p>Tạo sơ đồ hoặc chọn tệp từ danh sách.<br>Sau đó dùng <strong>✏️ Vẽ</strong> để chú thích &amp; tinh chỉnh.</p>
         </div>
         <div id="imgWrapper">
-          <img id="previewImg" alt="diagram preview">
+          <img id="previewImg" alt="xem trước sơ đồ">
           <svg id="annoLayer" xmlns="http://www.w3.org/2000/svg"></svg>
         </div>
         <div class="preview-loading" id="previewLoading">
@@ -337,16 +387,16 @@
       <div class="anno-panel collapsed" id="annoPanel">
         <div class="anno-panel-header" id="annoPanelHeader">
           <div class="anno-panel-left">
-            <span>✏️ Annotations</span>
+            <span>✏️ Chú thích</span>
             <span class="anno-count" id="annoCount" style="display:none">0</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px">
-            <button class="btn-icon" id="btnClearAnno" style="display:none;padding:3px 8px;font-size:11px">Clear all</button>
+            <button class="btn-icon" id="btnClearAnno" style="display:none;padding:3px 8px;font-size:11px">Xóa tất cả</button>
             <span class="anno-chevron">▲</span>
           </div>
         </div>
         <div class="anno-list" id="annoList">
-          <div class="anno-hint">Click <strong>✏️ Draw</strong> then drag on the preview to mark areas.</div>
+          <div class="anno-hint">Nhấn <strong>✏️ Vẽ</strong> rồi kéo trên ảnh xem trước để đánh dấu vùng cần chỉnh.</div>
         </div>
       </div>
     </div>
@@ -359,8 +409,8 @@
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
             <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
           </svg>
-          <p id="docsEmptyMsg">Documentation is generated alongside each new diagram.<br>Select a file or generate one to view its docs.</p>
-          <button class="btn-icon primary" id="btnGenDocs" style="display:none">✨ Generate Docs</button>
+          <p id="docsEmptyMsg">Tài liệu được tạo tự động cùng với mỗi sơ đồ mới.<br>Chọn một tệp hoặc tạo sơ đồ mới để xem tài liệu.</p>
+          <button class="btn-icon primary" id="btnGenDocs" style="display:none">✨ Tạo Tài liệu</button>
         </div>
         <div class="md-content" id="mdContent" style="display:none"></div>
       </div>
@@ -373,11 +423,10 @@
 // ── DOM refs ─────────────────────────────────────────
 const descEl          = document.getElementById("desc");
 const fileInput       = document.getElementById("fileInput");
-const uploadArea      = document.getElementById("uploadArea");
-const fileNameEl      = document.getElementById("fileName");
+const promptBox       = document.getElementById("promptBox");
+const promptFiles     = document.getElementById("promptFiles");
 const btn             = document.getElementById("btn");
 const btnIcon         = document.getElementById("btnIcon");
-const btnText         = document.getElementById("btnText");
 const statusEl        = document.getElementById("status");
 const previewFilename = document.getElementById("previewFilename");
 const previewBadge    = document.getElementById("previewBadge");
@@ -397,10 +446,10 @@ const annoList        = document.getElementById("annoList");
 const annoCount       = document.getElementById("annoCount");
 const btnClearAnno    = document.getElementById("btnClearAnno");
 const filesSection    = document.getElementById("filesSection");
-const filesHeader     = document.getElementById("filesHeader");
 const filesBody       = document.getElementById("filesBody");
 const filesCount      = document.getElementById("filesCount");
 const btnRefresh      = document.getElementById("btnRefresh");
+const btnReset        = document.getElementById("btnReset");
 const tabBtnPreview   = document.getElementById("tabBtnPreview");
 const tabBtnDocs      = document.getElementById("tabBtnDocs");
 const tabPreview      = document.getElementById("tabPreview");
@@ -528,7 +577,7 @@ async function loadDocs(filename) {
     if (!res.ok) {
       mdContent.style.display = "none";
       docsEmpty.style.display = "flex";
-      docsEmptyMsg.textContent = "No documentation found for this file.";
+      docsEmptyMsg.textContent = "Không tìm thấy tài liệu cho tệp này.";
       btnGenDocs.style.display = currentFilename ? "" : "none";
       docsBadge.style.display = "none";
       currentDocs = "";
@@ -545,7 +594,7 @@ async function loadDocs(filename) {
   } catch {
     mdContent.style.display = "none";
     docsEmpty.style.display = "flex";
-    docsEmptyMsg.textContent = "Could not load documentation.";
+    docsEmptyMsg.textContent = "Không thể tải tài liệu.";
     currentDocs = "";
   }
 }
@@ -554,15 +603,15 @@ async function loadDocs(filename) {
 btnGenDocs.addEventListener("click", async () => {
   if (!currentFilename) return;
   btnGenDocs.disabled = true;
-  btnGenDocs.textContent = "Generating…";
-  docsEmptyMsg.textContent = "Claude is writing the documentation…";
+  btnGenDocs.textContent = "Đang tạo…";
+  docsEmptyMsg.textContent = "Claude đang viết tài liệu…";
   try {
     const res = await fetch("/api/generate-docs", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ filename: currentFilename }),
     });
     const data = await res.json();
-    if (!res.ok) { docsEmptyMsg.textContent = "Error: " + (data.error ?? "Failed"); btnGenDocs.textContent = "✨ Generate Docs"; btnGenDocs.disabled = false; return; }
+    if (!res.ok) { docsEmptyMsg.textContent = "Lỗi: " + (data.error ?? "Thất bại"); btnGenDocs.textContent = "✨ Tạo Tài liệu"; btnGenDocs.disabled = false; return; }
     currentDocs = data.content;
     mdContent.innerHTML = renderMarkdown(data.content);
     mdContent.style.display = "block";
@@ -571,44 +620,87 @@ btnGenDocs.addEventListener("click", async () => {
     docsBadge.style.display = "";
     btnDlMd.style.display = "";
   } catch (err) {
-    docsEmptyMsg.textContent = "Error: " + err.message;
-    btnGenDocs.textContent = "✨ Generate Docs"; btnGenDocs.disabled = false;
+    docsEmptyMsg.textContent = "Lỗi: " + err.message;
+    btnGenDocs.textContent = "✨ Tạo Tài liệu"; btnGenDocs.disabled = false;
   }
 });
 
-// ── File upload (SA doc) ──────────────────────────────
-fileInput.addEventListener("change", () => readFile(fileInput.files[0]));
-uploadArea.addEventListener("dragover",  e => { e.preventDefault(); uploadArea.classList.add("drag-over"); });
-uploadArea.addEventListener("dragleave", () => uploadArea.classList.remove("drag-over"));
-uploadArea.addEventListener("drop", e => { e.preventDefault(); uploadArea.classList.remove("drag-over"); readFile(e.dataTransfer.files[0]); });
-function readFile(file) {
-  if (!file) return;
-  fileNameEl.textContent = file.name;
-  uploadArea.classList.add("has-file");
-  const fr = new FileReader();
-  fr.onload = e => { fileContent = e.target.result ?? ""; };
-  fr.readAsText(file);
+// ── Reset form ───────────────────────────────────────
+btnReset.addEventListener("click", clearInput);
+function clearInput() {
+  descEl.value = "";
+  autoResize();
+  clearAttachment();
+  statusEl.className = "";
+  statusEl.style.display = "none";
+}
+function clearAttachment() {
+  fileContent = "";
+  fileInput.value = "";
+  promptFiles.style.display = "none";
+  promptFiles.innerHTML = "";
 }
 
+// ── File upload (SA doc) ──────────────────────────────
+fileInput.addEventListener("change", () => readFile(fileInput.files[0]));
+promptBox.addEventListener("dragover",  e => { e.preventDefault(); promptBox.classList.add("drag-over"); });
+promptBox.addEventListener("dragleave", e => { if (!promptBox.contains(e.relatedTarget)) promptBox.classList.remove("drag-over"); });
+promptBox.addEventListener("drop", e => { e.preventDefault(); promptBox.classList.remove("drag-over"); readFile(e.dataTransfer.files[0]); });
+
+function readFile(file) {
+  if (!file) return;
+  fileContent = "";
+  const fr = new FileReader();
+  fr.onload = e => {
+    fileContent = e.target.result ?? "";
+    renderChip(file.name);
+  };
+  fr.readAsText(file);
+}
+function renderChip(name) {
+  promptFiles.style.display = "flex";
+  promptFiles.innerHTML = `
+    <div class="prompt-file-chip">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--text-muted)">
+        <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+      </svg>
+      <span class="prompt-file-chip-name" title="${name}">${name}</span>
+      <button class="prompt-file-chip-rm" title="Xóa tệp">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+          <path d="M18 6 6 18M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>`;
+  promptFiles.querySelector(".prompt-file-chip-rm").addEventListener("click", clearAttachment);
+}
+
+// ── Textarea auto-resize ──────────────────────────────
+function autoResize() {
+  descEl.style.height = "auto";
+  descEl.style.height = Math.min(descEl.scrollHeight, 320) + "px";
+}
+descEl.addEventListener("input", autoResize);
+
 // ── Generate ──────────────────────────────────────────
-function setThinking(msg = "Claude is designing your diagram…") {
+const ICON_SEND = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>`;
+const ICON_STOP = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>`;
+
+function setThinking(msg = "Claude đang thiết kế sơ đồ của bạn…") {
   btn.disabled = true;
   btnIcon.innerHTML = '<div class="ring"></div>';
-  btnText.textContent = "Thinking…";
   statusEl.className = "status thinking";
   statusEl.innerHTML = `<div class="ring"></div><span>${msg}</span>`;
   previewLoading.classList.add("visible");
 }
 function setIdle() {
   btn.disabled = false;
-  btnIcon.textContent = "✨";
-  btnText.textContent = "Think & Generate";
+  btnIcon.innerHTML = ICON_SEND;
   previewLoading.classList.remove("visible");
 }
 function showError(msg) {
   setIdle();
   statusEl.className = "status error";
-  statusEl.textContent = "Error: " + msg;
+  statusEl.textContent = "Lỗi: " + msg;
 }
 
 btn.addEventListener("click", async () => {
@@ -644,7 +736,7 @@ function showPreview(filename, previewDataUrl) {
   mdContent.innerHTML = "";
   mdContent.style.display = "none";
   docsEmpty.style.display = "flex";
-  docsEmpty.innerHTML = `<p style="color:var(--text-muted)">Documentation will be available in the <strong>Documentation</strong> tab.</p>`;
+  docsEmpty.innerHTML = `<p style="color:var(--text-muted)">Tài liệu sẽ có trong tab <strong>Tài liệu</strong> sau khi tạo xong.</p>`;
   if (previewDataUrl) {
     previewImg.src = previewDataUrl;
     previewImg.style.display = "block";
@@ -789,7 +881,7 @@ function updateAnnoPanel() {
   if (!count) {
     const hint = document.createElement("div");
     hint.className = "anno-hint";
-    hint.innerHTML = "Click <strong>✏️ Draw</strong> then drag on the preview to mark areas.";
+    hint.innerHTML = "Nhấn <strong>✏️ Vẽ</strong> rồi kéo trên ảnh xem trước để đánh dấu vùng cần chỉnh.";
     annoList.appendChild(hint);
     return;
   }
@@ -799,8 +891,8 @@ function updateAnnoPanel() {
     item.innerHTML = `
       <div class="anno-num">${i + 1}</div>
       <span class="anno-pos">[${ann.position}]</span>
-      <input class="anno-input" data-id="${ann.id}" placeholder="Describe what to change here…" value="${ann.text.replace(/"/g,"&quot;")}">
-      <button class="anno-del" data-id="${ann.id}" title="Remove">×</button>`;
+      <input class="anno-input" data-id="${ann.id}" placeholder="Mô tả thay đổi cần thực hiện…" value="${ann.text.replace(/"/g,"&quot;")}">
+      <button class="anno-del" data-id="${ann.id}" title="Xóa">×</button>`;
     item.querySelector(".anno-input").addEventListener("input", e => {
       const a = annotations.find(x => x.id === +e.target.dataset.id);
       if (a) { a.text = e.target.value; renderAnnotations(); }
@@ -824,9 +916,9 @@ function clearAnnotations() {
 // ── Regenerate with annotations ───────────────────────
 btnRegen.addEventListener("click", async () => {
   const filledAnno = annotations.filter(a => a.text.trim());
-  if (!filledAnno.length) { alert("Please add a description to at least one annotation before updating."); return; }
-  const desc = descEl.value.trim() || `Modify the existing ${currentFilename} diagram`;
-  setThinking("Updating diagram with your annotations…");
+  if (!filledAnno.length) { alert("Vui lòng thêm mô tả cho ít nhất một chú thích trước khi cập nhật."); return; }
+  const desc = descEl.value.trim() || `Chỉnh sửa sơ đồ ${currentFilename} hiện có`;
+  setThinking("Đang cập nhật sơ đồ theo chú thích của bạn…");
   drawMode = false; btnDraw.classList.remove("active"); annoLayer.classList.remove("draw-mode");
   try {
     const res = await fetch("/api/generate", {
@@ -842,11 +934,19 @@ btnRegen.addEventListener("click", async () => {
 });
 
 // ── Files list ────────────────────────────────────────
-filesHeader.addEventListener("click", e => {
-  if (e.target === btnRefresh || btnRefresh.contains(e.target)) return;
-  filesSection.classList.toggle("open");
-});
 btnRefresh.addEventListener("click", e => { e.stopPropagation(); loadFiles(); });
+
+function ftIcon(name) {
+  const ext = name.split(".").pop();
+  const map = {
+    drawio: { color: "#58a6ff", icon: "◈" },
+    md:     { color: "#7ee787", icon: "◊" },
+    json:   { color: "#d2a679", icon: "{}" },
+    svg:    { color: "#56d364", icon: "◐" },
+    ts:     { color: "#79b8ff", icon: "◆" },
+  };
+  return map[ext] || { color: "#7d8590", icon: "◇" };
+}
 
 async function loadFiles() {
   try {
@@ -854,16 +954,27 @@ async function loadFiles() {
     filesCount.textContent = files.length;
     filesBody.innerHTML = "";
     if (!files.length) {
-      filesBody.innerHTML = '<div class="files-empty">No files yet.</div>';
+      filesBody.innerHTML = '<div class="file-tree-empty">Chưa có tệp nào.</div>';
       return;
     }
     for (const name of files) {
+      const { color, icon } = ftIcon(name);
       const item = document.createElement("div");
-      item.className = "file-item" + (name === currentFilename ? " active" : "");
+      item.className = "file-tree-item" + (name === currentFilename ? " active" : "");
       if (name === currentFilename) activeFileItem = item;
-      item.innerHTML = `<span>📄</span><span class="file-item-name" title="${name}">${name}</span><button class="file-item-dl" title="Download .drawio">⬇</button>`;
+      item.innerHTML = `
+        <svg class="ft-arrow" width="6" height="8" viewBox="0 0 6 8" fill="none">
+          <path d="M1 1L5 4L1 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <svg class="ft-file-icon" width="13" height="15" viewBox="0 0 14 16" fill="${color}" opacity=".85">
+          <path d="M1.5 0C0.671573 0 0 0.671573 0 1.5V14.5C0 15.3284 0.671573 16 1.5 16H12.5C13.3284 16 14 15.3284 14 14.5V4.5L9.5 0H1.5Z"/>
+          <path d="M9 0V4.5H14" fill="${color}" fill-opacity="0.4"/>
+        </svg>
+        <span class="ft-name" title="${name}">${name}</span>
+        <button class="ft-dl" title="Tải về">⬇</button>
+        <span class="ft-dot"></span>`;
       item.addEventListener("click", async e => {
-        if (e.target.classList.contains("file-item-dl") || e.target.closest(".file-item-dl")) return;
+        if (e.target.classList.contains("ft-dl") || e.target.closest(".ft-dl")) return;
         if (activeFileItem) activeFileItem.classList.remove("active");
         item.classList.add("active"); activeFileItem = item;
         previewLoading.classList.add("visible");
@@ -878,7 +989,7 @@ async function loadFiles() {
         } catch (err) { console.error(err); }
         finally { previewLoading.classList.remove("visible"); }
       });
-      item.querySelector(".file-item-dl").addEventListener("click", e => {
+      item.querySelector(".ft-dl").addEventListener("click", e => {
         e.stopPropagation();
         const a = document.createElement("a");
         a.href = `/api/out/${encodeURIComponent(name)}`; a.download = name;
@@ -890,6 +1001,7 @@ async function loadFiles() {
 }
 
 // ── Init ──────────────────────────────────────────────
+btnIcon.innerHTML = ICON_SEND;
 loadFiles();
 </script>
 </body>
