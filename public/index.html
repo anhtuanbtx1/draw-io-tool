@@ -306,7 +306,7 @@
         <div class="prompt-actions">
           <div class="prompt-actions-left">
             <label class="prompt-attach-label" for="fileInput" title="Đính kèm tài liệu SA (.txt, .md, .json, .yaml)">
-              <input type="file" id="fileInput" accept=".txt,.md,.markdown,.json,.yaml,.yml" style="display:none">
+              <input type="file" id="fileInput" accept=".txt,.md,.markdown,.json,.yaml,.yml,.png,.jpg,.jpeg,.webp,.gif" style="display:none">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
               </svg>
@@ -477,6 +477,8 @@ const docsBadge       = document.getElementById("docsBadge");
 
 // ── State ─────────────────────────────────────────────
 let fileContent = "";
+let imageBase64 = "";
+let imageMediaType = "";
 let currentFilename = "";
 let activeFileItem = null;
 let drawMode = false;
@@ -682,6 +684,8 @@ function clearInput() {
 }
 function clearAttachment() {
   fileContent = "";
+  imageBase64 = "";
+  imageMediaType = "";
   fileInput.value = "";
   promptFiles.style.display = "none";
   promptFiles.innerHTML = "";
@@ -693,23 +697,39 @@ promptBox.addEventListener("dragover",  e => { e.preventDefault(); promptBox.cla
 promptBox.addEventListener("dragleave", e => { if (!promptBox.contains(e.relatedTarget)) promptBox.classList.remove("drag-over"); });
 promptBox.addEventListener("drop", e => { e.preventDefault(); promptBox.classList.remove("drag-over"); readFile(e.dataTransfer.files[0]); });
 
+const IMAGE_TYPES = new Set(["image/png","image/jpeg","image/webp","image/gif"]);
+
 function readFile(file) {
   if (!file) return;
-  fileContent = "";
-  const fr = new FileReader();
-  fr.onload = e => {
-    fileContent = e.target.result ?? "";
-    renderChip(file.name);
-  };
-  fr.readAsText(file);
+  clearAttachment();
+  if (IMAGE_TYPES.has(file.type)) {
+    const fr = new FileReader();
+    fr.onload = e => {
+      const dataUrl = e.target.result;
+      const [, b64] = dataUrl.split(",");
+      imageBase64 = b64;
+      imageMediaType = file.type;
+      renderChip(file.name, dataUrl);
+    };
+    fr.readAsDataURL(file);
+  } else {
+    const fr = new FileReader();
+    fr.onload = e => {
+      fileContent = e.target.result ?? "";
+      renderChip(file.name, null);
+    };
+    fr.readAsText(file);
+  }
 }
-function renderChip(name) {
+
+function renderChip(name, thumbnailUrl) {
+  const iconHtml = thumbnailUrl
+    ? `<img src="${thumbnailUrl}" style="width:22px;height:22px;object-fit:cover;border-radius:3px;flex-shrink:0">`
+    : `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--text-muted)"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>`;
   promptFiles.style.display = "flex";
   promptFiles.innerHTML = `
     <div class="prompt-file-chip">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--text-muted)">
-        <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
-      </svg>
+      ${iconHtml}
       <span class="prompt-file-chip-name" title="${name}">${name}</span>
       <button class="prompt-file-chip-rm" title="Xóa tệp">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
@@ -751,13 +771,21 @@ function showError(msg) {
 
 btn.addEventListener("click", async () => {
   const desc = descEl.value.trim();
-  if (!desc && !fileContent) { descEl.focus(); return; }
-  const fullDesc = [desc, fileContent ? "--- Attached ---\n" + fileContent : ""].filter(Boolean).join("\n\n");
-  setThinking();
+  if (!desc && !fileContent && !imageBase64) { descEl.focus(); return; }
+  const body = {};
+  if (imageBase64) {
+    body.imageBase64 = imageBase64;
+    body.imageMediaType = imageMediaType;
+    body.description = desc || "";
+    setThinking("Bước 1: Claude đang đọc ảnh kiến trúc…");
+  } else {
+    body.description = [desc, fileContent ? "--- Tài liệu đính kèm ---\n" + fileContent : ""].filter(Boolean).join("\n\n");
+    setThinking();
+  }
   try {
     const res = await fetch("/api/generate", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ description: fullDesc }),
+      body: JSON.stringify(body),
     });
     const data = await res.json();
     if (!res.ok) { showError(data.error ?? res.statusText); return; }

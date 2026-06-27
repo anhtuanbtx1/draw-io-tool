@@ -2,12 +2,13 @@
 // POST /api/generate  { description }  → JSON { filename, preview (SVG data URL) }
 // GET  /api/out/:file                  → serve saved .drawio file
 import express from "express";
+import Anthropic from "@anthropic-ai/sdk";
 import { spawn } from "node:child_process";
 import { readdirSync, readFileSync, writeFileSync, mkdirSync, statSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Diagram } from "./src/builder.mjs";
-import { icon, frame, group, stage, band, endpoint, renderTree } from "./src/layout-engine.mjs";
+import { icon, frame, group, grid, stage, band, endpoint, renderTree } from "./src/layout-engine.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -84,10 +85,70 @@ function buildHubspoke(spec, d) {
   }
 }
 
+function buildLayered(spec, d) {
+  const subsystems = spec.subsystems ?? [];
+  const layers = spec.layers ?? [];
+  const LABEL_W = 90;
+
+  const layerRows = layers.map((layer, li) => {
+    const labelBox = {
+      kind: "box", id: `lbl_${layer.id ?? `l${li}`}`,
+      label: layer.label ?? `Layer ${li + 1}`,
+      fill: li % 2 === 0 ? "#e3f2fd" : "#fce4ec",
+      stroke: "#9e9e9e", bold: true,
+      w: LABEL_W, h: 70,
+    };
+
+    const cells = subsystems.map((sub, si) => {
+      const cellIcons = makeIcons(layer.cells?.[sub.id] ?? []);
+      if (!cellIcons.length) {
+        return { kind: "box", id: `empty_${li}_${si}`, label: "",
+          fill: "none", stroke: "#e8e8e8", w: 200, h: 70 };
+      }
+      const cols = Math.min(3, cellIcons.length);
+      return grid(`cell_${li}_${si}`, null, "", {
+        cols, gap: 24,
+        fill: sub.color ? sub.color + "22" : "#fafafa",
+        stroke: sub.color ?? "#cccccc",
+        pad: 14,
+      }, cellIcons);
+    });
+
+    return frame(`row_${layer.id ?? `l${li}`}`, "", {
+      dir: "row", gap: 4, align: "top",
+      fill: li % 2 === 0 ? "#ffffff" : "#f5f5f5",
+      stroke: "#cccccc", pad: 8, header: 0,
+    }, [labelBox, ...cells]);
+  });
+
+  // Footer: subsystem labels
+  const ftPlaceholder = { kind: "box", id: "ft_ph", label: "", fill: "none", stroke: "none", w: LABEL_W, h: 36 };
+  const footers = subsystems.map((sub, si) =>
+    ({ kind: "box", id: `ft_${si}`, label: sub.label ?? sub.id,
+       fill: sub.color ?? "#bbdefb", stroke: "#888888", h: 36 })
+  );
+  const footerRow = frame("footer_row", "", {
+    dir: "row", gap: 4, align: "center", fill: "none", stroke: "none", pad: 8, header: 0,
+  }, [ftPlaceholder, ...footers]);
+
+  const root = frame("root", "", {
+    dir: "col", gap: 2, header: 0, pad: 10, fill: "none", stroke: "none",
+  }, [...layerRows, footerRow]);
+
+  renderTree(d, root, [40, 80]);
+  d.title(spec.title ?? "Architecture Diagram");
+  for (const lk of spec.links ?? []) {
+    try { d.link(lk.from, lk.to, lk.label ?? "", { flow: lk.flow, role: lk.role }); }
+    catch (e) { console.warn(`Link ${lk.from}→${lk.to} skipped:`, e.message); }
+  }
+}
+
 // Returns { xml, d } so the diagram object (with R registry) is available for SVG preview
 function buildDiagram(spec) {
-  const d = new Diagram(spec.type === "hubspoke" ? "hubspoke" : "pipeline");
+  const type = spec.type === "hubspoke" ? "hubspoke" : spec.type === "layered" ? "layered" : "pipeline";
+  const d = new Diagram(type);
   if (spec.type === "hubspoke") buildHubspoke(spec, d);
+  else if (spec.type === "layered") buildLayered(spec, d);
   else buildPipeline(spec, d);
   const { ok, errors } = d.validate();
   if (!ok) console.warn("Validation warnings:", errors);
@@ -333,6 +394,9 @@ DIAGRAM TYPES
   Use for: data pipelines, ETL, analytics, ML training.
 • hubspoke  — hub in center with spoke columns.
   Use for: event buses (EventBridge, Kafka), API gateways as central routers.
+• layered   — horizontal layers (rows) × vertical subsystems (columns).
+  Use for: multi-system architectures with layers like Cloud, Proxy, Presentation, Business, Storage
+  and multiple independent subsystems side by side.
 
 PIPELINE JSON SCHEMA
 {
@@ -354,12 +418,47 @@ HUBSPOKE JSON SCHEMA
   "links": [{"from":"p_api","to":"hub","label":"PutEvents"}]
 }
 
+LAYERED JSON SCHEMA
+{
+  "title": "...",
+  "type": "layered",
+  "subsystems": [
+    {"id": "sys1", "label": "Hệ thống A", "color": "#dae8fc"},
+    {"id": "sys2", "label": "Hệ thống B", "color": "#d5e8d4"}
+  ],
+  "layers": [
+    {
+      "id": "proxy", "label": "Proxy",
+      "cells": {
+        "sys1": [{"id":"ng1","name":"elastic_load_balancing","label":"NGINX Proxy"}],
+        "sys2": [{"id":"ng2","name":"elastic_load_balancing","label":"NGINX Proxy"}]
+      }
+    },
+    {
+      "id": "business", "label": "Business",
+      "cells": {
+        "sys1": [{"id":"kafka1","name":"kinesis_data_streams","label":"Kafka"},{"id":"redis1","name":"elasticache","label":"Redis"}],
+        "sys2": [{"id":"redis2","name":"elasticache","label":"Redis"}]
+      }
+    },
+    {
+      "id": "storage", "label": "Storage",
+      "cells": {
+        "sys1": [{"id":"db1","name":"aurora","label":"MongoDB"}],
+        "sys2": [{"id":"db2","name":"aurora","label":"MongoDB"}]
+      }
+    }
+  ],
+  "links": [{"from":"ng1","to":"kafka1","label":"routes"},{"from":"ng2","to":"redis2"}]
+}
+
 RULES
 • IDs must be unique snake_case (e.g. kds, lambda_1, s3_raw).
-• Use 3-6 icons per stage / 2-5 icons per column.
+• Use 3-6 icons per stage / 2-5 icons per column / up to 6 icons per cell.
 • "flow":true marks the primary animated data path (main spine only).
 • "role":"fanout" for 1→many or many→1 edges.
-• Always include a monitoring/security band for production architectures.
+• Always include a monitoring/security band for production architectures (pipeline only).
+• For layered type: cells object keys must exactly match subsystem ids. Omit empty cells.
 • Use EXACT icon names from this catalog:
 
 ${catalogText}
@@ -426,9 +525,152 @@ async function generateSpec(description, annotations = []) {
   });
 }
 
+// ── Anthropic SDK — image vision ─────────────────────────────────────────────
+function buildImagePrompt(description = "", annotations = []) {
+  let extra = "";
+  if (annotations.length) {
+    extra = "\n\nANNOTATIONS — changes requested by the user on the current diagram:\n"
+      + annotations.map((a, i) => `${i + 1}. [${a.position ?? "area"}] ${a.text}`).join("\n")
+      + "\n\nIncorporate ALL annotation changes into the updated diagram. Keep unchanged parts intact.";
+  }
+  const descHint = description?.trim() ? `\n\nAdditional context from user: ${description}` : "";
+
+  return `You are an expert Solution Architecture Diagram Designer.
+Carefully analyze the architecture diagram shown in the image.
+Identify every component, service, data store, and all connections/flows between them.
+Then output ONLY a valid JSON object — no markdown fences, no explanation.${extra}${descHint}
+
+The JSON must have exactly two top-level keys:
+• "spec": the diagram specification (schema below)
+• "docs": a markdown string documenting the architecture (escape newlines as \\n in the JSON string)
+
+DOCS FORMAT (for the "docs" string — viết hoàn toàn bằng Tiếng Việt):
+# <Tên kiến trúc>
+## Tổng quan
+2-3 câu mô tả mục đích hệ thống và đặc điểm chính.
+## Các thành phần
+Danh sách bullet — mỗi thành phần và vai trò của nó.
+## Luồng dữ liệu
+Các bước đánh số — dữ liệu di chuyển end-to-end qua hệ thống như thế nào.
+## Các quyết định thiết kế quan trọng
+2-3 bullet về các lựa chọn kiến trúc đáng chú ý và sự đánh đổi.
+
+DIAGRAM TYPES
+• pipeline  — left-to-right data flow (Ingest → Process → Store → Serve).
+  Use for: data pipelines, ETL, analytics, ML training.
+• hubspoke  — hub in center with spoke columns.
+  Use for: event buses (EventBridge, Kafka), API gateways as central routers.
+• layered   — horizontal layers (rows) × vertical subsystems (columns).
+  Use for: multi-system architectures with layers like Cloud, Proxy, Presentation, Business, Storage
+  and multiple independent subsystems side by side.
+
+PIPELINE JSON SCHEMA
+{
+  "title": "...",
+  "type": "pipeline",
+  "sourceLabel": "SOURCES\\n\\nDB · Apps",
+  "consumerLabel": "CONSUMERS\\n\\nAPIs · ML",
+  "stages": [{ "id": "s0", "index": 0, "label": "1 · Ingest", "icons": [{"id":"kds","name":"kinesis_data_streams","label":"Kinesis"}] }],
+  "bands": [{ "id": "b0", "label": "Monitoring · Security", "icons": [{"id":"cw","name":"cloudwatch_2","label":"CloudWatch"}] }],
+  "links": [{"from":"src","to":"kds","label":"stream","flow":true,"role":"fanout"}]
+}
+
+HUBSPOKE JSON SCHEMA
+{
+  "title": "...",
+  "type": "hubspoke",
+  "hub": { "icon": "eventbridge", "label": "Amazon EventBridge" },
+  "columns": [{ "id": "producers", "label": "PRODUCERS", "icons": [{"id":"p_api","name":"api_gateway","label":"API Gateway"}] }],
+  "links": [{"from":"p_api","to":"hub","label":"PutEvents"}]
+}
+
+LAYERED JSON SCHEMA
+{
+  "title": "...",
+  "type": "layered",
+  "subsystems": [
+    {"id": "sys1", "label": "Hệ thống A", "color": "#dae8fc"},
+    {"id": "sys2", "label": "Hệ thống B", "color": "#d5e8d4"}
+  ],
+  "layers": [
+    {
+      "id": "proxy", "label": "Proxy",
+      "cells": {
+        "sys1": [{"id":"ng1","name":"elastic_load_balancing","label":"NGINX Proxy"}],
+        "sys2": [{"id":"ng2","name":"elastic_load_balancing","label":"NGINX Proxy"}]
+      }
+    },
+    {
+      "id": "business", "label": "Business",
+      "cells": {
+        "sys1": [{"id":"kafka1","name":"kinesis_data_streams","label":"Kafka"},{"id":"redis1","name":"elasticache","label":"Redis"}],
+        "sys2": [{"id":"redis2","name":"elasticache","label":"Redis"}]
+      }
+    },
+    {
+      "id": "storage", "label": "Storage",
+      "cells": {
+        "sys1": [{"id":"db1","name":"aurora","label":"MongoDB"}],
+        "sys2": [{"id":"db2","name":"aurora","label":"MongoDB"}]
+      }
+    }
+  ],
+  "links": [{"from":"ng1","to":"kafka1","label":"routes"},{"from":"ng2","to":"redis2"}]
+}
+
+RULES
+• IDs must be unique snake_case (e.g. kds, lambda_1, s3_raw).
+• Use 3-6 icons per stage / 2-5 icons per column / up to 6 icons per cell.
+• "flow":true marks the primary animated data path (main spine only).
+• "role":"fanout" for 1→many or many→1 edges.
+• Always include a monitoring/security band for production architectures (pipeline only).
+• For layered type: cells object keys must exactly match subsystem ids. Omit empty cells.
+• Use EXACT icon names from this catalog:
+
+${catalogText}
+
+Recreate the architecture shown in the image above as a draw.io diagram.`;
+}
+
+async function generateSpecFromImage(imageBase64, mediaType, description = "", annotations = []) {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error("Để phân tích ảnh cần ANTHROPIC_API_KEY trong biến môi trường. Hãy thiết lập ANTHROPIC_API_KEY=sk-ant-... trước khi khởi động server.");
+  }
+  const anthropic = new Anthropic();
+
+  // ── Bước 1: Claude Vision mô tả ảnh bằng ngôn ngữ tự nhiên ─────────────────
+  console.log(`[image-generate] bước 1 — đọc ảnh (${mediaType})`);
+  const describeResp = await anthropic.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 2000,
+    messages: [{
+      role: "user",
+      content: [
+        { type: "image", source: { type: "base64", media_type: mediaType, data: imageBase64 } },
+        { type: "text", text: `Analyze this software architecture diagram image carefully.
+
+List every component, service, data store, queue, and external system you can see.
+Describe all connections, arrows, and data flows between them — include direction and labels if visible.
+Note the overall architecture pattern (data pipeline, event-driven, microservices, hub-spoke, etc.).
+Include any stage labels, group names, or section titles visible in the diagram.
+
+Be exhaustive and precise. This description will be used to recreate the diagram as a draw.io file.` }
+      ]
+    }]
+  });
+  const imageDescription = describeResp.content[0]?.text ?? "";
+  console.log(`[image-generate] bước 1 xong — ${imageDescription.length} ký tự`);
+
+  // ── Bước 2: Dùng mô tả để sinh spec qua CLI ─────────────────────────────────
+  const parts = ["Kiến trúc được trích xuất từ ảnh tải lên:\n" + imageDescription];
+  if (description?.trim()) parts.push("Bối cảnh bổ sung từ người dùng: " + description);
+  console.log(`[image-generate] bước 2 — sinh spec từ mô tả`);
+  return generateSpec(parts.join("\n\n"), annotations);
+}
+
 // ── Express app ──────────────────────────────────────────────────────────────
 const app = express();
-app.use(express.json({ limit: "5mb" }));
+app.use(express.json({ limit: "15mb" }));
 app.use(express.static(join(__dirname, "public")));
 
 // List .drawio files in out/
@@ -559,13 +801,14 @@ app.get("/api/docs", (req, res) => {
 });
 
 app.post("/api/generate", async (req, res) => {
-  const { description, annotations = [] } = req.body ?? {};
-  if (!description?.trim()) return res.status(400).json({ error: "description is required" });
+  const { description, annotations = [], imageBase64, imageMediaType } = req.body ?? {};
+  if (!description?.trim() && !imageBase64) return res.status(400).json({ error: "description hoặc ảnh là bắt buộc" });
 
   try {
-    console.log(`[generate] ${description.slice(0, 80)}… annotations=${annotations.length}`);
-    const { spec, docs } = await generateSpec(description, annotations);
-    console.log(`[generate] type=${spec.type}, title="${spec.title}", hasDocs=${!!docs}`);
+    const { spec, docs } = imageBase64
+      ? await generateSpecFromImage(imageBase64, imageMediaType || "image/png", description, annotations)
+      : await generateSpec(description, annotations);
+    console.log(`[generate] type=${spec.type}, title="${spec.title}", hasDocs=${!!docs}, fromImage=${!!imageBase64}`);
 
     const { xml, d } = buildDiagram(spec);
     const slug = (spec.title ?? "architecture").replace(/[^a-z0-9]+/gi, "_").toLowerCase();
