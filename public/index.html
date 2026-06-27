@@ -31,6 +31,14 @@
     .topbar-logo { font-size: 16px; font-weight: 600; }
     .topbar-logo span { color: var(--border-focus); }
     .topbar-sub { font-size: 12px; color: var(--text-muted); }
+    .btn-new-session {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 12px; border-radius: 6px; cursor: pointer;
+      background: var(--surface2); color: var(--text-muted);
+      border: 1px solid var(--border); font-size: 12px; font-weight: 500;
+      transition: all .15s;
+    }
+    .btn-new-session:hover { border-color: var(--border-focus); color: var(--text); background: rgba(88,166,255,.08); }
 
     /* ── Split layout ── */
     .split { flex: 1; display: flex; overflow: hidden; }
@@ -275,6 +283,12 @@
 <div class="topbar">
   <span class="topbar-logo">Kỹ sư <span>kiến trúc</span></span>
   <span class="topbar-sub">Trình Tạo Sơ Đồ Kiến Trúc</span>
+  <button class="btn-new-session" id="btnNewSession" title="Bắt đầu phiên làm việc mới">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 5v14M5 12h14"/>
+    </svg>
+    Phiên mới
+  </button>
 </div>
 
 <div class="split">
@@ -450,6 +464,7 @@ const filesBody       = document.getElementById("filesBody");
 const filesCount      = document.getElementById("filesCount");
 const btnRefresh      = document.getElementById("btnRefresh");
 const btnReset        = document.getElementById("btnReset");
+const btnNewSession   = document.getElementById("btnNewSession");
 const tabBtnPreview   = document.getElementById("tabBtnPreview");
 const tabBtnDocs      = document.getElementById("tabBtnDocs");
 const tabPreview      = document.getElementById("tabPreview");
@@ -623,6 +638,37 @@ btnGenDocs.addEventListener("click", async () => {
     docsEmptyMsg.textContent = "Lỗi: " + err.message;
     btnGenDocs.textContent = "✨ Tạo Tài liệu"; btnGenDocs.disabled = false;
   }
+});
+
+// ── New session ──────────────────────────────────────
+btnNewSession.addEventListener("click", () => {
+  // Reset input
+  clearInput();
+  // Reset preview
+  currentFilename = "";
+  currentDocs = "";
+  previewImg.src = "";
+  previewImg.style.display = "none";
+  previewFilename.textContent = "";
+  previewBadge.style.display = "none";
+  dlBtn.disabled = true;
+  btnDraw.disabled = true;
+  emptyState.style.display = "";
+  // Reset annotations
+  clearAnnotations();
+  // Reset docs tab
+  mdContent.innerHTML = "";
+  mdContent.style.display = "none";
+  docsEmpty.style.display = "flex";
+  docsEmptyMsg.textContent = "Tài liệu được tạo tự động cùng với mỗi sơ đồ mới.\nChọn một tệp hoặc tạo sơ đồ mới để xem tài liệu.";
+  docsBadge.style.display = "none";
+  btnGenDocs.style.display = "none";
+  btnDlMd.style.display = "none";
+  btnRegen.style.display = "none";
+  // Switch to preview tab
+  switchTab("preview");
+  // Deselect active file
+  if (activeFileItem) { activeFileItem.classList.remove("active"); activeFileItem = null; }
 });
 
 // ── Reset form ───────────────────────────────────────
